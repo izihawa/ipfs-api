@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import logging
 import random
 import typing
@@ -133,13 +134,13 @@ class IpfsApiClient(IpfsHttpClient):
         response = await response.json()
         return response['Hash']
 
-    async def export_dag(self, file_hash):
+    async def export_dag(self, cid):
         logging.getLogger('statbox').info({
             'action': 'exporting_dag',
             'mode': 'ipfs_api_client',
-            'file_hash': file_hash,
+            'cid': cid,
         })
-        response = await self.post(f"/api/v0/dag/export?arg={file_hash}")
+        response = await self.post(f"/api/v0/dag/export?arg={cid}")
         return await response.read()
 
     async def ls(self, cid, size=True, resolve_type=True):
@@ -148,7 +149,32 @@ class IpfsApiClient(IpfsHttpClient):
             'mode': 'ipfs_api_client',
             'cid': cid,
         })
-        response = await self.post(f'/api/v0/ls?arg={cid}&size={size}&resolve-type={resolve_type}')
+        response = await self.post(
+            f'/api/v0/ls?arg={cid}&size={json.dumps(size)}&resolve-type={json.dumps(resolve_type)}'
+        )
+        return await response.json()
+
+    async def ls_stream(self, cid, size=True, resolve_type=True, timeout: int = 0):
+        logging.getLogger('statbox').info({
+            'action': 'ls',
+            'mode': 'ipfs_api_client',
+            'cid': cid,
+        })
+        response = await self.post(
+            f'/api/v0/ls?arg={cid}&size={json.dumps(size)}&resolve-type={json.dumps(resolve_type)}&stream=true',
+            response_processor=None,
+            timeout=timeout,
+        )
+        async for line in response.content:
+            yield line
+
+    async def pin(self, cid: str, progress: bool = False):
+        logging.getLogger('statbox').info({
+            'action': 'pin',
+            'mode': 'ipfs_api_client',
+            'cid': cid,
+        })
+        response = await self.post(f"/api/v0/dag/export?arg={cid}&progress={json.dumps(progress)}")
         return await response.json()
 
     async def walk_ipfs_directory(self, cid, recursive=True, size=True, resolve_type=True) -> typing.AsyncIterable[NamedCid]:
